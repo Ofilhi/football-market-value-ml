@@ -105,6 +105,21 @@ This downloads the dataset once into `data/raw/transfermarkt/` (about 55 MB)
 and writes `data/processed/players_merged.csv`, plus
 `data/processed/unmatched_players.csv` for the players that could not be matched.
 
+Finally, clean the data and build the model-ready dataset:
+
+```bash
+python -m football_value.features
+```
+
+This writes `data/processed/players_features.csv`, with one row per player:
+the five features and the market value. The cleaning steps are:
+
+- missing assists are set to 0 (the API leaves the field empty instead of 0);
+- positions are grouped into Attack, Midfield and Defence;
+- players whose market value was last updated before the season are removed;
+- a player who changed league mid-season gets a single row with summed statistics;
+- age is computed at the end of the season.
+
 ## Development
 
 ```bash
@@ -117,7 +132,7 @@ ruff check .    # lint
 - [x] Project skeleton, configuration and tooling
 - [x] Data collection from football-data.org (with local cache and rate limiting)
 - [x] Market values and minutes from the Transfermarkt dataset, joined to the API data
-- [ ] Cleaning and feature engineering
+- [x] Cleaning and feature engineering
 - [ ] Exploratory data analysis
 - [ ] Linear regression: training and evaluation against a baseline
 - [ ] Visualisations: predicted vs actual value, residuals, over/under-valued players
