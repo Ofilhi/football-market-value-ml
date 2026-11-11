@@ -155,6 +155,66 @@ so the regression coefficients can be interpreted without much trouble.
 
 ![Correlation matrix](reports/figures/correlation_matrix.png)
 
+## Model and results
+
+Train and evaluate the models:
+
+```bash
+python -m football_value.model
+```
+
+**Method**
+
+- The players are split once into a training set (80%, 1,092 players) and a
+  test set (20%, 274 players) with a fixed random seed. All the numbers below
+  are measured on the test set, which the models never saw.
+- The model predicts the logarithm of the market value; predictions are
+  converted back to euros before the errors are measured.
+- Numeric features are standardised and the position is one-hot encoded
+  inside a scikit-learn pipeline, so the preprocessing is learned from the
+  training set only (no data leakage).
+- Three models are compared: a **baseline** that gives every player the same
+  typical value, the **linear** regression on the five features, and an
+  **extended** variant that adds the league and age squared.
+
+**Results on the test set**
+
+| Model | Typical error (% of real value) | MAE | RMSE | R² (log scale) |
+|---|---|---|---|---|
+| Baseline | 73% | €15.6M | €28.9M | 0.00 |
+| **Linear (5 features)** | **63%** | **€11.5M** | **€20.5M** | **0.49** |
+| Extended (+ league, age²) | 49% | €11.1M | €30.9M | 0.63 |
+
+Five simple statistics explain about half of the differences in (log) market
+value. That is a real signal, but far from a pricing tool: the typical
+prediction is still off by 63% of the player's real value.
+
+Adding the league and age squared helps most players (typical error down to
+49%), but the RMSE gets worse. One prediction is responsible: the extended
+model values Erling Haaland at about €600M instead of €200M. A model trained
+on logarithms multiplies its effects, so a player who is extreme on several
+features at once gets an explosive prediction once converted back to euros.
+
+**What drives the value** (linear model)
+
+| Feature | Effect on market value |
+|---|---|
+| Age | -48% for 4.2 more years |
+| Goals | +38% for 3.5 more goals |
+| Minutes played | +35% for 806 more minutes |
+| Assists | +29% for 2.2 more assists |
+| Defender | +27% compared with an attacker with the same statistics |
+| Midfielder | +26% compared with an attacker with the same statistics |
+
+Numeric effects are given for one standard deviation of the feature, which
+makes them comparable: age weighs more than any performance statistic. The
+position effect is a reminder of how coefficients read: a defender is not
+worth more than an attacker in general, but a defender who scores and assists
+as much as an attacker is.
+
+The full tables are in [`reports/metrics.csv`](reports/metrics.csv) and
+[`reports/coefficients.csv`](reports/coefficients.csv).
+
 ## Development
 
 ```bash
@@ -169,7 +229,7 @@ ruff check .    # lint
 - [x] Market values and minutes from the Transfermarkt dataset, joined to the API data
 - [x] Cleaning and feature engineering
 - [x] Exploratory data analysis
-- [ ] Linear regression: training and evaluation against a baseline
+- [x] Linear regression: training and evaluation against a baseline
 - [ ] Visualisations: predicted vs actual value, residuals, over/under-valued players
 - [ ] LLM scouting reports
 - [ ] Results, limitations and possible improvements

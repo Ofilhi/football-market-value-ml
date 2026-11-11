@@ -1,0 +1,7 @@
+feature,coefficient,one_std,effect_percent
+age,-0.658,4.249,-48.2106
+goals,0.3233,3.5426,38.1647
+minutes_played,0.2987,805.6467,34.8168
+assists,0.2508,2.2322,28.5063
+position_Defence,0.2381,,26.8871
+position_Midfield,0.2321,,26.1296
