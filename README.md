@@ -215,6 +215,39 @@ as much as an attacker is.
 The full tables are in [`reports/metrics.csv`](reports/metrics.csv) and
 [`reports/coefficients.csv`](reports/coefficients.csv).
 
+## Predicted vs actual value
+
+Produce the result charts:
+
+```bash
+python -m football_value.visualize
+```
+
+Every prediction shown here was made by a model that did not see the player
+during training (the test set, plus cross-validation for the training set).
+
+**The model finds the order of magnitude, but stays cautious.** Cheap players
+are predicted too high and stars too low: with only five features, predictions
+stay close to the average.
+
+![Predicted against actual market value](reports/figures/predicted_vs_actual.png)
+
+**The errors are balanced overall, but not across leagues.** Premier League
+players are predicted about twice too low, because the league is not a
+feature of the model.
+
+![Residuals](reports/figures/residuals.png)
+
+**Where the model and the market disagree the most.** These lists say as much
+about the model as about the market:
+
+- the players the model rates *higher* are mostly veterans: a straight-line
+  age effect cannot follow how fast value collapses after 30;
+- the players the model rates *lower* are stars of top clubs, often defenders
+  or holding midfielders, whose value does not show in goals and assists.
+
+![Largest gaps between model and market](reports/figures/value_gaps.png)
+
 ## Development
 
 ```bash
@@ -230,6 +263,6 @@ ruff check .    # lint
 - [x] Cleaning and feature engineering
 - [x] Exploratory data analysis
 - [x] Linear regression: training and evaluation against a baseline
-- [ ] Visualisations: predicted vs actual value, residuals, over/under-valued players
+- [x] Visualisations: predicted vs actual value, residuals, over/under-valued players
 - [ ] LLM scouting reports
 - [ ] Results, limitations and possible improvements
