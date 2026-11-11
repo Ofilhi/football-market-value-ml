@@ -248,6 +248,39 @@ about the model as about the market:
 
 ![Largest gaps between model and market](reports/figures/value_gaps.png)
 
+## LLM scouting reports
+
+An LLM turns the model's numbers into readable text. It needs `RESPAN_API_KEY`
+in your `.env` file.
+
+```bash
+python -m football_value.scouting player "Vedat Muriqi"
+```
+
+writes a short scouting note on one player: his season in numbers, what the
+model thinks he is worth compared with the market, and the most likely reason
+for the gap. A part of the name is enough ("Muriqi").
+
+```bash
+python -m football_value.scouting model
+```
+
+writes a plain-language summary of the regression: what it does, how accurate
+it is, which features matter most and what it cannot see.
+
+**How the LLM is kept honest**
+
+- It never predicts anything: it only comments on numbers the pipeline already
+  computed.
+- It receives those numbers as a JSON document, together with the model's known
+  weaknesses (no league, straight-line age effect, cautious predictions), so it
+  can say when a gap is a blind spot of the model rather than a bargain.
+- It is instructed to use only the facts provided, not its own memory of
+  transfers, injuries or trophies.
+
+The provider is any OpenAI-compatible endpoint: change `LLM_BASE_URL` and
+`LLM_MODEL` in `.env` to use another one.
+
 ## Development
 
 ```bash
@@ -264,5 +297,5 @@ ruff check .    # lint
 - [x] Exploratory data analysis
 - [x] Linear regression: training and evaluation against a baseline
 - [x] Visualisations: predicted vs actual value, residuals, over/under-valued players
-- [ ] LLM scouting reports
+- [x] LLM scouting reports
 - [ ] Results, limitations and possible improvements
