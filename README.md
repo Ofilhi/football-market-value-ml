@@ -47,7 +47,7 @@ dropped silently.
 ├── data/
 │   ├── raw/              # Cached API responses and downloads (not versioned)
 │   └── processed/        # Cleaned, model-ready datasets (not versioned)
-├── reports/figures/      # Charts produced by the pipeline
+├── reports/figures/      # Charts produced by the pipeline (versioned)
 ├── .env.example          # Template for the required environment variables
 ├── requirements.txt      # Pinned runtime dependencies
 └── pyproject.toml        # Package metadata and tool configuration
@@ -120,6 +120,41 @@ the five features and the market value. The cleaning steps are:
 - a player who changed league mid-season gets a single row with summed statistics;
 - age is computed at the end of the season.
 
+Explore the data and produce the charts shown below:
+
+```bash
+python -m football_value.eda
+```
+
+## Exploratory analysis
+
+The dataset holds **1,366 players** from the top 5 European leagues.
+
+**1. The target is heavily skewed.** Half of the players are worth less than
+€10M while a few stars reach €200M. On a log scale the distribution becomes
+almost symmetric (skewness 3.0 → -0.2), so the model predicts the logarithm of
+the market value.
+
+![Distribution of the market value](reports/figures/market_value_distribution.png)
+
+**2. Age is the strongest single signal.** Value stays high until about 27
+and then drops steadily. Goals, assists and minutes each have a moderate
+positive link with value.
+
+![Features against market value](reports/figures/features_vs_market_value.png)
+
+**3. Position barely matters, the league does.** The three positions share the
+same median value (€10M). The league is not one of the model's features, yet
+the median Premier League player is worth €25M against €6M to €9M elsewhere:
+a known blind spot of this model.
+
+![Market value by position and by league](reports/figures/market_value_by_group.png)
+
+**4. The features are only mildly correlated with each other** (0.36 at most),
+so the regression coefficients can be interpreted without much trouble.
+
+![Correlation matrix](reports/figures/correlation_matrix.png)
+
 ## Development
 
 ```bash
@@ -133,7 +168,7 @@ ruff check .    # lint
 - [x] Data collection from football-data.org (with local cache and rate limiting)
 - [x] Market values and minutes from the Transfermarkt dataset, joined to the API data
 - [x] Cleaning and feature engineering
-- [ ] Exploratory data analysis
+- [x] Exploratory data analysis
 - [ ] Linear regression: training and evaluation against a baseline
 - [ ] Visualisations: predicted vs actual value, residuals, over/under-valued players
 - [ ] LLM scouting reports
