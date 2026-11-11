@@ -27,7 +27,8 @@ prediction itself.
 ## Data sources
 
 - **[football-data.org](https://www.football-data.org/)** (free plan): goals,
-  assists, date of birth and position.
+  assists, date of birth and position. The API only lists players who scored
+  at least one goal in the season, so the dataset is limited to those players.
 - **Transfermarkt public dataset**: market value and minutes played, which the
   free plan of football-data.org does not provide.
 
@@ -77,6 +78,18 @@ cp .env.example .env
 
 The `.env` file is ignored by git, so your keys never leave your machine.
 
+## Usage
+
+Collect the players' statistics from football-data.org:
+
+```bash
+python -m football_value.collect
+```
+
+This sends one request per league, caches the raw responses in
+`data/raw/football_data/` and writes `data/raw/football_data_players.csv`.
+Running it again reads the cache instead of calling the API.
+
 ## Development
 
 ```bash
@@ -87,7 +100,7 @@ ruff check .    # lint
 ## Roadmap
 
 - [x] Project skeleton, configuration and tooling
-- [ ] Data collection from football-data.org (with local cache and rate limiting)
+- [x] Data collection from football-data.org (with local cache and rate limiting)
 - [ ] Market values and minutes from the Transfermarkt dataset, joined to the API data
 - [ ] Cleaning and feature engineering
 - [ ] Exploratory data analysis
