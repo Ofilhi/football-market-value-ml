@@ -1,0 +1,7 @@
+# Runtime dependencies (pinned for reproducibility)
+pandas==3.1.1
+scikit-learn==1.9.1
+matplotlib==3.11.2
+requests==2.34.2
+python-dotenv==1.2.4
+openai==3.49.0
