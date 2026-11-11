@@ -38,6 +38,20 @@ COMPETITIONS: dict[str, str] = {
 
 # A season is identified by the year it starts in: 2025 means 2025-26.
 SEASON = 2025
+SEASON_START = f"{SEASON}-07-01"
+SEASON_END = f"{SEASON + 1}-06-30"
+
+# Public Transfermarkt dataset (https://github.com/dcaribou/transfermarkt-datasets).
+TRANSFERMARKT_BASE_URL = "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data"
+
+# football-data.org competition code -> Transfermarkt competition id.
+TRANSFERMARKT_COMPETITION_IDS: dict[str, str] = {
+    "PL": "GB1",
+    "PD": "ES1",
+    "SA": "IT1",
+    "BL1": "L1",
+    "FL1": "FR1",
+}
 
 # --- Modelling ---------------------------------------------------------------
 

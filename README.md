@@ -29,10 +29,15 @@ prediction itself.
 - **[football-data.org](https://www.football-data.org/)** (free plan): goals,
   assists, date of birth and position. The API only lists players who scored
   at least one goal in the season, so the dataset is limited to those players.
-- **Transfermarkt public dataset**: market value and minutes played, which the
-  free plan of football-data.org does not provide.
+- **[Transfermarkt public dataset](https://github.com/dcaribou/transfermarkt-datasets)**:
+  market value and minutes played, which the free plan of football-data.org
+  does not provide. The market value is each player's latest valuation at the
+  end of the season.
 
-The two sources are joined on player name and date of birth.
+The two sources share no identifier, so players are matched on their name and
+date of birth, among the players who appeared in the same league. About 99% of
+the players are matched; the others are listed in a report instead of being
+dropped silently.
 
 ## Project structure
 
@@ -90,6 +95,16 @@ This sends one request per league, caches the raw responses in
 `data/raw/football_data/` and writes `data/raw/football_data_players.csv`.
 Running it again reads the cache instead of calling the API.
 
+Then add the market values and minutes played from the Transfermarkt dataset:
+
+```bash
+python -m football_value.merge
+```
+
+This downloads the dataset once into `data/raw/transfermarkt/` (about 55 MB)
+and writes `data/processed/players_merged.csv`, plus
+`data/processed/unmatched_players.csv` for the players that could not be matched.
+
 ## Development
 
 ```bash
@@ -101,7 +116,7 @@ ruff check .    # lint
 
 - [x] Project skeleton, configuration and tooling
 - [x] Data collection from football-data.org (with local cache and rate limiting)
-- [ ] Market values and minutes from the Transfermarkt dataset, joined to the API data
+- [x] Market values and minutes from the Transfermarkt dataset, joined to the API data
 - [ ] Cleaning and feature engineering
 - [ ] Exploratory data analysis
 - [ ] Linear regression: training and evaluation against a baseline
