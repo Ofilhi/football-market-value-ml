@@ -60,8 +60,10 @@ TEST_SIZE = 0.2
 
 # --- LLM defaults (overridable from the environment) -------------------------
 
-DEFAULT_LLM_BASE_URL = "https://gateway.respan.ai/v1/"
-DEFAULT_LLM_MODEL = "gemini-4-carbon:free"
+# Any OpenAI-compatible provider works. These defaults point to the free tier of
+# the Google Gemini API; see .env.example for other providers.
+DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+DEFAULT_LLM_MODEL = "gemini-2.5-flash"
 
 
 class MissingSettingError(RuntimeError):
@@ -83,7 +85,7 @@ class Settings:
 
     def require_llm_api_key(self) -> str:
         """Return the LLM provider key, or fail with a helpful message."""
-        return _require(self.llm_api_key, "RESPAN_API_KEY")
+        return _require(self.llm_api_key, "LLM_API_KEY")
 
 
 def _require(value: str | None, name: str) -> str:
@@ -103,7 +105,8 @@ def load_settings(env_file: Path | None = PROJECT_ROOT / ".env") -> Settings:
 
     return Settings(
         football_data_api_key=os.getenv("FOOTBALL_DATA_API_KEY") or None,
-        llm_api_key=os.getenv("RESPAN_API_KEY") or None,
+        # RESPAN_API_KEY is the former name of LLM_API_KEY, still accepted.
+        llm_api_key=os.getenv("LLM_API_KEY") or os.getenv("RESPAN_API_KEY") or None,
         llm_base_url=os.getenv("LLM_BASE_URL") or DEFAULT_LLM_BASE_URL,
         llm_model=os.getenv("LLM_MODEL") or DEFAULT_LLM_MODEL,
     )

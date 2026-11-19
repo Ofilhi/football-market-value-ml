@@ -77,8 +77,8 @@ cp .env.example .env
 | Variable | Purpose |
 |---|---|
 | `FOOTBALL_DATA_API_KEY` | football-data.org token ([free registration](https://www.football-data.org/client/register)) |
-| `RESPAN_API_KEY` | key for the LLM gateway |
-| `LLM_BASE_URL` | OpenAI-compatible endpoint of the LLM gateway |
+| `LLM_API_KEY` | key of the LLM provider |
+| `LLM_BASE_URL` | OpenAI-compatible endpoint of the LLM provider |
 | `LLM_MODEL` | model used for the scouting reports |
 
 The `.env` file is ignored by git, so your keys never leave your machine.
@@ -250,7 +250,7 @@ about the model as about the market:
 
 ## LLM scouting reports
 
-An LLM turns the model's numbers into readable text. It needs `RESPAN_API_KEY`
+An LLM turns the model's numbers into readable text. It needs `LLM_API_KEY`
 in your `.env` file.
 
 ```bash

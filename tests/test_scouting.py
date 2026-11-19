@@ -135,7 +135,7 @@ def test_provider_errors_and_empty_answers_become_llm_errors():
 
 
 def test_command_line_exits_cleanly_when_the_key_is_missing(monkeypatch, tmp_path, caplog):
-    monkeypatch.delenv("RESPAN_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setattr(scouting.config, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(
         scouting.config,
@@ -146,4 +146,4 @@ def test_command_line_exits_cleanly_when_the_key_is_missing(monkeypatch, tmp_pat
     exit_code = scouting.main(["model"])
 
     assert exit_code == 1
-    assert "RESPAN_API_KEY is not set" in caplog.text
+    assert "LLM_API_KEY is not set" in caplog.text
