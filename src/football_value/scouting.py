@@ -33,6 +33,9 @@ from football_value.model import COEFFICIENTS_FILE, METRICS_FILE, PREDICTIONS_FI
 logger = logging.getLogger(__name__)
 
 TEMPERATURE = 0.3
+REQUEST_TIMEOUT_SECONDS = 60
+# No automatic retries: each one counts against the daily quota of free plans.
+MAX_RETRIES = 0
 
 MODEL_DESCRIPTION = (
     "A linear regression predicts the logarithm of a football player's market value "
@@ -188,7 +191,12 @@ def build_messages(facts: dict[str, Any], instructions: str) -> list[dict[str, s
 
 def create_client(settings: config.Settings) -> OpenAI:
     """Create a client for the OpenAI-compatible gateway set in ``.env``."""
-    return OpenAI(base_url=settings.llm_base_url, api_key=settings.require_llm_api_key())
+    return OpenAI(
+        base_url=settings.llm_base_url,
+        api_key=settings.require_llm_api_key(),
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        max_retries=MAX_RETRIES,
+    )
 
 
 def generate_text(client: OpenAI, model: str, messages: list[dict[str, str]]) -> str:

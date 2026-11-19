@@ -63,7 +63,7 @@ TEST_SIZE = 0.2
 # Any OpenAI-compatible provider works. These defaults point to the free tier of
 # the Google Gemini API; see .env.example for other providers.
 DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-DEFAULT_LLM_MODEL = "gemini-2.5-flash"
+DEFAULT_LLM_MODEL = "gemini-3.1-flash-lite"
 
 
 class MissingSettingError(RuntimeError):
