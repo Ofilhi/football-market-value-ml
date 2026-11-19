@@ -20,6 +20,8 @@ def players():
             "assists": rng.integers(0, 10, size),
             "minutes_played": rng.integers(100, 3400, size),
             "age": age,
+            "points_per_game": rng.uniform(0.5, 2.5, size),
+            "cl_stage": rng.integers(0, 7, size),
             TARGET: (10 ** (8.5 - 0.08 * age + rng.normal(0, 0.3, size))).astype(int),
         }
     )
@@ -50,5 +52,5 @@ def test_correlation_matrix_is_square_and_finds_the_age_effect(players):
 def test_run_writes_every_chart(players, tmp_path):
     paths = eda.run(players, directory=tmp_path)
 
-    assert len(paths) == 4
+    assert len(paths) == 5
     assert all(path.exists() and path.stat().st_size > 0 for path in paths)

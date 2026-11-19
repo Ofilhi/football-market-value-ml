@@ -60,3 +60,13 @@ def test_players_without_match_or_value_are_reported_not_dropped_silently():
     assert sorted(left_out["name"]) == ["No Value Player", "Unknown Player"]
     assert list(left_out.columns) == list(players.columns)
     assert len(merged) + len(left_out) == len(players)
+
+
+def test_extra_factors_are_attached_to_the_matched_players():
+    players, tm_players, tm_stats, tm_valuations = make_inputs()
+    extras = pd.DataFrame({"caps": [54, 3]}, index=pd.Index([418560, 500], name="player_id"))
+
+    merged, _ = merge_sources(players, tm_players, tm_stats, tm_valuations, extras)
+
+    assert merged.loc[0, "name"] == "Erling Haaland"
+    assert merged.loc[0, "caps"] == 54

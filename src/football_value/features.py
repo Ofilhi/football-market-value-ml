@@ -1,16 +1,22 @@
 """Clean the merged data and build the model-ready dataset.
 
-Run it after the merge step::
+Run it after the merge and teams steps::
 
     python -m football_value.features
 
 The output, ``data/processed/players_features.csv``, has one row per player
-with the five features (goals, assists, minutes played, age, position) and
-the target (market value).
+with all the candidate factors and the target (market value):
 
-The position is kept as a readable category here. It is turned into numbers
-inside the model pipeline, so that the encoding is learned from the training
-set only.
+* the five original features: goals, assists, minutes played, age, position;
+* **player activity**, from football-data.org: matches played, share of the
+  team's matches, goals per match;
+* **team factors**, from football-data.org: league table and Champions League;
+* **extra factors**, from Transfermarkt (optional): career history, club in
+  Europe, contract, international caps.
+
+Which of these a model uses is decided in :mod:`football_value.model`. Text
+columns (position, league) are kept readable here and encoded inside the model
+pipeline, so that the encoding is learned from the training set only.
 """
 
 from __future__ import annotations
@@ -19,23 +25,67 @@ import logging
 
 import pandas as pd
 
-from football_value import config, merge
+from football_value import config, merge, teams
 
 logger = logging.getLogger(__name__)
 
 FEATURES_FILE = config.PROCESSED_DATA_DIR / "players_features.csv"
 
+# The five original features.
 NUMERIC_FEATURES = ["goals", "assists", "minutes_played", "age"]
 CATEGORICAL_FEATURES = ["position"]
 TARGET = "market_value_eur"
 
+# Derived from the player's own statistics and his team's number of matches.
+ACTIVITY_COLUMNS = ["played_matches", "availability", "goals_per_match"]
+
+# Copied from the team table, by the player's team.
+TEAM_COLUMNS = [
+    "table_position",
+    "points",
+    "points_per_game",
+    "goal_difference_per_game",
+    "goals_against_per_game",
+    "clean_sheet_rate",
+    "win_rate",
+    "cl_games",
+    "cl_stage",
+]
+
+# Optional factors, computed by the merge step from Transfermarkt.
+EXTRA_COLUMNS = [
+    "minutes_all",
+    "matches_all",
+    "min_per_match",
+    "prev_minutes",
+    "prev_goals",
+    "prev_assists",
+    "career_minutes",
+    "career_seasons",
+    "club_cl_games",
+    "club_el_games",
+    "club_prev_cl_games",
+    "club_prev_euro_games",
+    "caps",
+    "intl_goals",
+    "contract_months",
+    "contract_missing",
+]
+
+# Columns allowed to stay empty: the model fills them in (see model.py).
+OPTIONAL_COLUMNS = ["contract_months"]
+
 OUTPUT_COLUMNS = [
     "player_id",
+    "tm_player_id",
     "name",
     "team",
     "competition",
     *CATEGORICAL_FEATURES,
     *NUMERIC_FEATURES,
+    *ACTIVITY_COLUMNS,
+    *TEAM_COLUMNS,
+    *EXTRA_COLUMNS,
     TARGET,
 ]
 
@@ -97,11 +147,12 @@ def drop_stale_valuations(
 def combine_league_rows(players: pd.DataFrame) -> pd.DataFrame:
     """Merge the rows of a player who changed league during the season.
 
-    Goals, assists and minutes are added up. The team and league kept are
-    those where the player spent the most minutes.
+    Goals, assists, minutes and matches played are added up. The team and
+    league kept are those where the player spent the most minutes.
     """
+    summed = ["goals", "assists", "minutes_played", "played_matches"]
     ordered = players.sort_values("minutes_played", ascending=False)
-    totals = ordered.groupby("player_id", sort=False)[["goals", "assists", "minutes_played"]].sum()
+    totals = ordered.groupby("player_id", sort=False)[summed].sum()
 
     main_rows = ordered.drop_duplicates("player_id").set_index("player_id")
     main_rows[totals.columns] = totals
@@ -114,7 +165,34 @@ def add_age(players: pd.DataFrame, as_of: str = config.SEASON_END) -> pd.DataFra
     return players.assign(age=(days.dt.days / DAYS_PER_YEAR).round(2))
 
 
-def build_features(merged: pd.DataFrame) -> pd.DataFrame:
+def add_team_factors(players: pd.DataFrame, team_table: pd.DataFrame) -> pd.DataFrame:
+    """Attach the factors of each player's team, and the player's activity.
+
+    Added columns: everything in :data:`TEAM_COLUMNS`, plus
+
+    * ``availability``: share of his team's league matches the player appeared in
+      (capped at 1, since a player who changed league can have played more);
+    * ``goals_per_match``: goals divided by matches played.
+
+    Raises:
+        ValueError: if a team is missing from the team table.
+    """
+    wanted = [*TEAM_COLUMNS, "played"]
+    table = team_table.set_index("team")[wanted]
+
+    missing = sorted(set(players["team"]) - set(table.index))
+    if missing:
+        raise ValueError(f"Teams missing from the team table: {missing}")
+
+    joined = players.join(table, on="team")
+    matches = joined["played_matches"].clip(lower=1)
+    return joined.assign(
+        availability=(joined["played_matches"] / joined["played"]).clip(upper=1),
+        goals_per_match=joined["goals"] / matches,
+    ).drop(columns="played")
+
+
+def build_features(merged: pd.DataFrame, team_table: pd.DataFrame) -> pd.DataFrame:
     """Run every cleaning step and return the model-ready table."""
     players = (
         merged.pipe(fill_missing_assists)
@@ -122,8 +200,9 @@ def build_features(merged: pd.DataFrame) -> pd.DataFrame:
         .pipe(drop_stale_valuations)
         .pipe(combine_league_rows)
         .pipe(add_age)
+        .pipe(add_team_factors, team_table)
     )
-    players = players.astype({"minutes_played": int, TARGET: int})
+    players = players.astype({"minutes_played": int, TARGET: int, "tm_player_id": int})
     return players[OUTPUT_COLUMNS].sort_values("player_id").reset_index(drop=True)
 
 
@@ -131,9 +210,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     merged = pd.read_csv(merge.MERGED_FILE)
-    features = build_features(merged)
+    team_table = pd.read_csv(teams.OUTPUT_FILE)
+    features = build_features(merged, team_table)
 
-    missing = int(features.isna().sum().sum())
+    required = features.drop(columns=OPTIONAL_COLUMNS)
+    missing = int(required.isna().sum().sum())
     if missing:
         raise ValueError(f"{missing} missing values remain in the features table.")
 

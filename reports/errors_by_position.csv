@@ -1,0 +1,6 @@
+model,Attack,Defence,Midfield
+baseline,73.13,72.28,69.07
+linear,57.4,58.59,53.56
+ridge,33.02,32.37,32.55
+ridge_tm,29.21,28.88,29.07
+boosting,30.46,29.39,27.09

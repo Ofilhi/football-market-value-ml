@@ -4,7 +4,7 @@ Run it after the features step::
 
     python -m football_value.eda
 
-It prints a few key statistics and saves four charts in ``reports/figures/``.
+It prints a few key statistics and saves five charts in ``reports/figures/``.
 """
 
 from __future__ import annotations
@@ -34,6 +34,17 @@ FEATURE_LABELS = {
 }
 
 POSITION_ORDER = ["Attack", "Midfield", "Defence"]
+
+# Short names of the Champions League rounds, from "not played" to the final.
+CL_STAGE_NAMES = {
+    0: "Not played",
+    1: "League stage",
+    2: "Playoffs",
+    3: "Round of 16",
+    4: "Quarter-finals",
+    5: "Semi-finals",
+    6: "Final",
+}
 
 
 def add_log_target(players: pd.DataFrame) -> pd.DataFrame:
@@ -142,10 +153,16 @@ def plot_value_by_group(players: pd.DataFrame, directory: Path) -> Path:
     return plotting.save_figure(fig, "market_value_by_group", directory)
 
 
-def _boxplot(ax: plt.Axes, players: pd.DataFrame, column: str, order: list[str]) -> None:
+def _boxplot(
+    ax: plt.Axes,
+    players: pd.DataFrame,
+    column: str,
+    order: list,
+    labels: list[str] | None = None,
+) -> None:
     ax.boxplot(
         [players.loc[players[column] == group, TARGET] for group in order],
-        tick_labels=order,
+        tick_labels=labels or order,
         widths=0.5,
         patch_artist=True,
         boxprops={"facecolor": plotting.BLUE, "edgecolor": plotting.BLUE, "alpha": 0.35},
@@ -162,6 +179,44 @@ def _boxplot(ax: plt.Axes, players: pd.DataFrame, column: str, order: list[str])
     )
     plotting.log_euro_axis(ax)
     ax.grid(axis="x", visible=False)
+
+
+def plot_club_factors(players: pd.DataFrame, directory: Path) -> Path:
+    """Market value against the strength of the player's club."""
+    stages = sorted(players["cl_stage"].unique())
+    labels = [
+        f"{CL_STAGE_NAMES[stage]}\n(n={(players['cl_stage'] == stage).sum()})" for stage in stages
+    ]
+    correlation = np.corrcoef(np.log(players[TARGET]), players["points_per_game"])[0, 1]
+    fig, (left, right) = plt.subplots(
+        1, 2, figsize=(12.5, 5), sharey=True, gridspec_kw={"width_ratios": [1.5, 1]}
+    )
+
+    _boxplot(left, players, "cl_stage", stages, labels)
+    left.set_title("By furthest round reached in the Champions League")
+    left.set_ylabel("Market value (log scale)")
+    left.tick_params(axis="x", labelsize=8.5)
+
+    right.scatter(
+        players["points_per_game"],
+        players[TARGET],
+        s=14,
+        color=plotting.BLUE,
+        alpha=0.35,
+        edgecolors="none",
+    )
+    right.set_title(f"By points per game in the league (r = {correlation:+.2f})")
+    right.set_xlabel("Club's points per game")
+    plotting.log_euro_axis(right)
+
+    plotting.set_figure_title(
+        fig,
+        "Players of strong clubs are worth much more",
+        "Club strength is one of the strongest signals, on par with age and ahead of any "
+        "statistic of the player.",
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.9))
+    return plotting.save_figure(fig, "club_factors_vs_market_value", directory)
 
 
 def plot_correlation_matrix(players: pd.DataFrame, directory: Path) -> Path:
@@ -222,6 +277,7 @@ def run(players: pd.DataFrame, directory: Path = config.FIGURES_DIR) -> list[Pat
         plot_target_distribution(players, directory),
         plot_features_vs_target(players, directory),
         plot_value_by_group(players, directory),
+        plot_club_factors(players, directory),
         plot_correlation_matrix(players, directory),
     ]
 

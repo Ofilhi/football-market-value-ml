@@ -40,9 +40,15 @@ COMPETITIONS: dict[str, str] = {
 SEASON = 2025
 SEASON_START = f"{SEASON}-07-01"
 SEASON_END = f"{SEASON + 1}-06-30"
+PREVIOUS_SEASON_START = f"{SEASON - 1}-07-01"
 
 # Public Transfermarkt dataset (https://github.com/dcaribou/transfermarkt-datasets).
 TRANSFERMARKT_BASE_URL = "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data"
+
+# Transfermarkt ids of the European club competitions (used to measure how
+# often a club played in Europe).
+TRANSFERMARKT_CHAMPIONS_LEAGUE = ("CL",)
+TRANSFERMARKT_OTHER_EUROPE = ("EL", "UCOL", "ECL")
 
 # football-data.org competition code -> Transfermarkt competition id.
 TRANSFERMARKT_COMPETITION_IDS: dict[str, str] = {

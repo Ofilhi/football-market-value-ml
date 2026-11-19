@@ -6,8 +6,8 @@ Run it after the collection step::
 
 It writes two files in ``data/processed/``:
 
-* ``players_merged.csv``: the matched players, with their minutes played and
-  market value;
+* ``players_merged.csv``: the matched players, with their minutes played,
+  market value and optional extra factors (career history, club in Europe, ...);
 * ``unmatched_players.csv``: the players that could not be matched, kept as a
   report so the loss is visible rather than silent.
 """
@@ -32,6 +32,7 @@ def merge_sources(
     tm_players: pd.DataFrame,
     tm_stats: pd.DataFrame,
     tm_valuations: pd.DataFrame,
+    tm_extras: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Attach minutes played and market value to the football-data.org players.
 
@@ -40,6 +41,8 @@ def merge_sources(
         tm_players: Transfermarkt players (``player_id``, ``name``, ``date_of_birth``).
         tm_stats: output of :func:`transfermarkt.season_league_stats`.
         tm_valuations: output of :func:`transfermarkt.latest_valuations`.
+        tm_extras: optional output of :func:`transfermarkt.player_extras`
+            (indexed by Transfermarkt player id).
 
     Returns:
         The merged table and the table of players left out, in that order.
@@ -66,6 +69,11 @@ def merge_sources(
         how="left",
     )
 
+    if tm_extras is not None:
+        merged = merged.merge(
+            tm_extras.rename_axis("tm_player_id").reset_index(), on="tm_player_id", how="left"
+        )
+
     is_complete = merged["tm_player_id"].notna() & merged["market_value_eur"].notna()
     complete = merged[is_complete].drop(columns="competition_id").reset_index(drop=True)
     left_out = merged.loc[~is_complete, list(players.columns.drop("competition_id"))]
@@ -79,15 +87,15 @@ def main() -> None:
     paths = {table: transfermarkt.download_table(table) for table in transfermarkt.TABLES}
 
     tm_players = transfermarkt.load_players(paths["players"])
-    tm_stats = transfermarkt.season_league_stats(
-        transfermarkt.load_appearances(paths["appearances"]),
-        competition_ids=config.TRANSFERMARKT_COMPETITION_IDS.values(),
-    )
+    appearances = transfermarkt.load_appearances(paths["appearances"])
+    league_ids = list(config.TRANSFERMARKT_COMPETITION_IDS.values())
+    tm_stats = transfermarkt.season_league_stats(appearances, competition_ids=league_ids)
+    tm_extras = transfermarkt.player_extras(appearances, tm_players, league_ids)
     tm_valuations = transfermarkt.latest_valuations(
         transfermarkt.load_valuations(paths["player_valuations"])
     )
 
-    merged, left_out = merge_sources(players, tm_players, tm_stats, tm_valuations)
+    merged, left_out = merge_sources(players, tm_players, tm_stats, tm_valuations, tm_extras)
 
     config.PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
     merged.to_csv(MERGED_FILE, index=False)

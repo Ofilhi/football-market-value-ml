@@ -8,6 +8,7 @@ def make_merged(**overrides):
     """Two single-league players and one who changed league mid-season."""
     data = {
         "player_id": [1, 2, 3, 3],
+        "tm_player_id": [101, 102, 103, 103],
         "name": ["Striker", "Midfielder", "Traveller", "Traveller"],
         "date_of_birth": ["2000-06-30", "1996-01-01", "2001-03-15", "2001-03-15"],
         "position": ["Offence", "Central Midfield", "Defence", "Defence"],
@@ -16,10 +17,23 @@ def make_merged(**overrides):
         "goals": [20, 3, 1, 2],
         "assists": [5.0, None, None, 4.0],
         "minutes_played": [3000.0, 1500.0, 400.0, 1200.0],
+        "played_matches": [34, 20, 8, 20],
         "valuation_date": ["2026-06-01", "2026-05-20", "2026-06-10", "2026-06-10"],
         "market_value_eur": [80e6, 10e6, 5e6, 5e6],
     }
-    return pd.DataFrame({**data, **overrides})
+    merged = pd.DataFrame({**data, **overrides})
+    # Optional extra factors from Transfermarkt, identical for the two rows of a player.
+    for column in features.EXTRA_COLUMNS:
+        merged[column] = 1.0
+    return merged
+
+
+def make_team_table():
+    teams = ["Club A", "Club B", "Club C", "Club D"]
+    table = pd.DataFrame({"team": teams, "played": [38, 38, 38, 34]})
+    for column in features.TEAM_COLUMNS:
+        table[column] = range(len(teams))
+    return table
 
 
 def test_missing_assists_become_zero():
@@ -59,6 +73,7 @@ def test_league_rows_are_combined_and_main_team_is_kept():
     assert traveller["goals"] == 3
     assert traveller["assists"] == 4
     assert traveller["minutes_played"] == 1600
+    assert traveller["played_matches"] == 28
     assert traveller["team"] == "Club D"  # most minutes played there
     assert traveller["competition"] == "SA"
     assert traveller["market_value_eur"] == 5e6  # a value, not a sum
@@ -71,8 +86,34 @@ def test_age_is_computed_at_the_reference_date():
     assert result.loc[1, "age"] == pytest.approx(30.49, abs=0.01)
 
 
+def test_team_factors_and_player_activity_are_added():
+    players = features.fill_missing_assists(make_merged()).iloc[[0]]
+
+    result = features.add_team_factors(players, make_team_table())
+
+    assert result.loc[0, "points_per_game"] == 0  # copied from the team table
+    assert result.loc[0, "availability"] == pytest.approx(34 / 38)
+    assert result.loc[0, "goals_per_match"] == pytest.approx(20 / 34)
+    assert "played" not in result.columns
+
+
+def test_availability_is_capped_at_one_for_players_who_changed_league():
+    players = make_merged(played_matches=[34, 20, 40, 40]).iloc[[2]]  # 40 matches, team played 38
+
+    result = features.add_team_factors(players, make_team_table())
+
+    assert result.loc[2, "availability"] == 1
+
+
+def test_a_team_missing_from_the_team_table_is_reported():
+    players = make_merged(team=["Club A", "Club B", "Unknown FC", "Club D"])
+
+    with pytest.raises(ValueError, match="Unknown FC"):
+        features.add_team_factors(players, make_team_table())
+
+
 def test_build_features_returns_a_clean_model_ready_table():
-    result = features.build_features(make_merged())
+    result = features.build_features(make_merged(), make_team_table())
 
     assert list(result.columns) == features.OUTPUT_COLUMNS
     assert list(result["player_id"]) == [1, 2, 3]

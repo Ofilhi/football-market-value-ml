@@ -5,11 +5,12 @@
 The steps run in order, each one reading the files written by the previous one:
 
 1. ``collect``: player statistics from football-data.org (cached);
-2. ``merge``: market values and minutes from Transfermarkt;
-3. ``features``: cleaning and feature engineering;
-4. ``eda``: exploratory charts;
-5. ``model``: training, evaluation, predictions;
-6. ``visualize``: charts of the results.
+2. ``teams``: league table, results and Champions League from football-data.org;
+3. ``merge``: market values, minutes and extra factors from Transfermarkt;
+4. ``features``: cleaning and feature engineering;
+5. ``eda``: exploratory charts;
+6. ``model``: training, evaluation, predictions;
+7. ``visualize``: charts of the results.
 
 The LLM scouting reports (:mod:`football_value.scouting`) are left out on
 purpose: they call an external service with its own usage limits.
@@ -21,11 +22,11 @@ import logging
 import time
 from types import ModuleType
 
-from football_value import collect, eda, features, merge, model, visualize
+from football_value import collect, eda, features, merge, model, teams, visualize
 
 logger = logging.getLogger(__name__)
 
-STEPS: tuple[ModuleType, ...] = (collect, merge, features, eda, model, visualize)
+STEPS: tuple[ModuleType, ...] = (collect, teams, merge, features, eda, model, visualize)
 
 
 def run() -> None:

@@ -59,7 +59,17 @@ def download_table(
 
 def load_players(path: Path) -> pd.DataFrame:
     """Load the players table with a clean ``YYYY-MM-DD`` date of birth."""
-    players = pd.read_csv(path, usecols=["player_id", "name", "date_of_birth"])
+    players = pd.read_csv(
+        path,
+        usecols=[
+            "player_id",
+            "name",
+            "date_of_birth",
+            "international_caps",
+            "international_goals",
+            "contract_expiration_date",
+        ],
+    )
     players["date_of_birth"] = players["date_of_birth"].str[:10]
     return players
 
@@ -68,7 +78,16 @@ def load_appearances(path: Path) -> pd.DataFrame:
     """Load the columns of the appearances table that the project needs."""
     return pd.read_csv(
         path,
-        usecols=["player_id", "date", "competition_id", "goals", "assists", "minutes_played"],
+        usecols=[
+            "game_id",
+            "player_id",
+            "player_club_id",
+            "date",
+            "competition_id",
+            "goals",
+            "assists",
+            "minutes_played",
+        ],
     )
 
 
@@ -114,3 +133,89 @@ def latest_valuations(valuations: pd.DataFrame, as_of: str = config.SEASON_END) 
     return latest.rename(
         columns={"date": "valuation_date", "market_value_in_eur": "market_value_eur"}
     )
+
+
+DAYS_PER_MONTH = 30.4
+
+
+def player_extras(
+    appearances: pd.DataFrame,
+    players: pd.DataFrame,
+    league_ids: Iterable[str],
+    season_start: str = config.SEASON_START,
+    season_end: str = config.SEASON_END,
+    previous_season_start: str = config.PREVIOUS_SEASON_START,
+) -> pd.DataFrame:
+    """Build optional extra factors for every player, none of them a market value.
+
+    * **Season activity**: minutes and matches in all competitions.
+    * **Career history**: minutes, goals and assists of the previous season,
+      and minutes and number of seasons before the current one.
+    * **Club in Europe**: Champions League and other European matches played
+      by the player's club this season and last season. This measures the
+      prestige of the club without using any market value.
+    * **Profile**: international caps and goals, and the months left on the
+      contract at the end of the season.
+
+    Returns:
+        One row per player of ``players``, indexed by ``player_id``.
+    """
+    league_ids = list(league_ids)
+    in_season = appearances["date"].between(season_start, season_end)
+    in_previous = appearances["date"].between(previous_season_start, season_start) & ~in_season
+    before = appearances[appearances["date"] < season_start]
+
+    season = appearances[in_season].groupby("player_id")
+    extras = pd.DataFrame(
+        {"minutes_all": season["minutes_played"].sum(), "matches_all": season.size()}
+    )
+
+    previous = appearances[in_previous].groupby("player_id")
+    extras["prev_minutes"] = previous["minutes_played"].sum()
+    extras["prev_goals"] = previous["goals"].sum()
+    extras["prev_assists"] = previous["assists"].sum()
+
+    # A football season runs from July to June: label each match by the year it starts in.
+    seasons_before = before["date"].str[:4].astype(int) - (before["date"].str[5:7].astype(int) < 7)
+    extras["career_minutes"] = before.groupby("player_id")["minutes_played"].sum()
+    extras["career_seasons"] = seasons_before.groupby(before["player_id"]).nunique()
+
+    # The club of the season: where the player spent most minutes in the five leagues.
+    league_minutes = (
+        appearances[in_season & appearances["competition_id"].isin(league_ids)]
+        .groupby(["player_id", "player_club_id"], as_index=False)["minutes_played"]
+        .sum()
+        .sort_values("minutes_played")
+        .drop_duplicates("player_id", keep="last")
+        .set_index("player_id")["player_club_id"]
+    )
+
+    def club_games(window: pd.Series, competitions: Iterable[str]) -> pd.Series:
+        matches = appearances[window & appearances["competition_id"].isin(list(competitions))]
+        return matches.groupby("player_club_id")["game_id"].nunique()
+
+    champions, other = config.TRANSFERMARKT_CHAMPIONS_LEAGUE, config.TRANSFERMARKT_OTHER_EUROPE
+    club_columns = {
+        "club_cl_games": club_games(in_season, champions),
+        "club_el_games": club_games(in_season, other),
+        "club_prev_cl_games": club_games(in_previous, champions),
+        "club_prev_euro_games": club_games(in_previous, (*champions, *other)),
+    }
+    extras = extras.reindex(players["player_id"])
+    club_of_season = extras.index.map(league_minutes)
+    for column, games_by_club in club_columns.items():
+        extras[column] = pd.Series(club_of_season, index=extras.index).map(games_by_club)
+
+    count_columns = [column for column in extras.columns]
+    extras[count_columns] = extras[count_columns].fillna(0)
+    extras["min_per_match"] = extras["minutes_all"] / extras["matches_all"].clip(lower=1)
+
+    profile = players.set_index("player_id")
+    extras["caps"] = profile["international_caps"].fillna(0)
+    extras["intl_goals"] = profile["international_goals"].fillna(0)
+    months_left = (
+        pd.to_datetime(profile["contract_expiration_date"]) - pd.Timestamp(season_end)
+    ).dt.days / DAYS_PER_MONTH
+    extras["contract_months"] = months_left.clip(lower=0)  # missing stays missing
+    extras["contract_missing"] = months_left.isna().astype(int)
+    return extras

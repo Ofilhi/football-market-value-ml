@@ -11,7 +11,7 @@ def test_steps_run_in_dependency_order(monkeypatch):
 
     pipeline.run()
 
-    assert calls == ["collect", "merge", "features", "eda", "model", "visualize"]
+    assert calls == ["collect", "teams", "merge", "features", "eda", "model", "visualize"]
 
 
 def test_a_failing_step_stops_the_pipeline(monkeypatch):
@@ -28,4 +28,4 @@ def test_a_failing_step_stops_the_pipeline(monkeypatch):
     with pytest.raises(RuntimeError, match="merge failed"):
         pipeline.run()
 
-    assert calls == ["collect"]  # nothing after the failing step ran
+    assert calls == ["collect", "teams"]  # nothing after the failing step ran

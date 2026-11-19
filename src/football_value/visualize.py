@@ -129,9 +129,9 @@ def plot_predicted_vs_actual(predictions: pd.DataFrame, directory: Path) -> Path
 
     plotting.set_figure_title(
         fig,
-        "The model gets the order of magnitude, and plays it safe at both ends",
-        "Each dot is a player, predicted by a model that never saw him. Cheap players are\n"
-        "predicted too high and stars too low: predictions stay closer to the average.",
+        "Predicted against actual market value",
+        "Each dot is a player, predicted by a model that never saw him. "
+        "The closer to the dashed line, the better the prediction.",
     )
     fig.tight_layout(rect=(0, 0, 1, 0.9))
     return plotting.save_figure(fig, "predicted_vs_actual", directory)
@@ -155,7 +155,7 @@ def plot_residuals(predictions: pd.DataFrame, directory: Path) -> Path:
     plotting.log_euro_axis(left, "x")
     left.set_xlabel("Predicted market value (log scale)")
     left.set_ylabel("Prediction compared with the real value")
-    left.set_title("No pattern left along the predictions")
+    left.set_title("Along the predicted value")
 
     right.boxplot(
         [predictions.loc[predictions["competition"] == code, RATIO] for code in league_order],
@@ -175,7 +175,7 @@ def plot_residuals(predictions: pd.DataFrame, directory: Path) -> Path:
         },
     )
     right.grid(axis="x", visible=False)
-    right.set_title("Premier League players are predicted too low")
+    right.set_title("By league")
 
     for ax in (left, right):
         ax.set_yscale("log")
@@ -186,8 +186,9 @@ def plot_residuals(predictions: pd.DataFrame, directory: Path) -> Path:
 
     plotting.set_figure_title(
         fig,
-        "The errors are balanced overall, but not across leagues",
-        "The league is not a feature of the model, so its effect ends up in the errors.",
+        "Prediction errors",
+        "Each value compares the prediction with the real market value. "
+        "The black line is a perfect prediction.",
     )
     fig.tight_layout(rect=(0, 0, 1, 0.9))
     return plotting.save_figure(fig, "residuals", directory)
@@ -199,9 +200,9 @@ def plot_value_gaps(predictions: pd.DataFrame, directory: Path) -> Path:
     fig, (top, bottom) = plt.subplots(2, 1, figsize=(10.5, 9.4), sharex=True)
 
     _gap_bars(top, model_higher, plotting.BLUE)
-    top.set_title("Model higher than the market: mostly veterans, whose value drops faster")
+    top.set_title("Model higher than the market")
     _gap_bars(bottom, model_lower, plotting.RED)
-    bottom.set_title("Model lower than the market: top-club stars valued for more than goals")
+    bottom.set_title("Model lower than the market")
     bottom.set_xlabel("Model's value compared with the market value")
 
     plotting.set_figure_title(
