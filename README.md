@@ -6,9 +6,17 @@ This project trains a **linear regression** model that predicts a player's
 market value from their performance and profile, then compares the prediction
 with the player's actual market value to spot who looks over- or under-valued.
 
-> **Status:** work in progress. The project skeleton is in place; data
-> collection, modelling and results are being added step by step (see the
-> [roadmap](#roadmap)).
+**Result in one line:** goals, assists, minutes, age and position explain about
+half of the differences in (log) market value, and the typical prediction is
+still off by 63% of a player's real value. That is a real signal, but far from a
+pricing tool, and the interesting part is *where* the model disagrees with the
+market (see [Predicted vs actual value](#predicted-vs-actual-value)).
+
+**Contents:** [Data](#data-sources) ·
+[Quick start](#getting-started) · [Exploratory analysis](#exploratory-analysis) ·
+[Model and results](#model-and-results) ·
+[LLM reports](#llm-scouting-reports) · [Limitations](#limitations) ·
+[Possible improvements](#possible-improvements)
 
 ## Approach
 
@@ -42,15 +50,31 @@ dropped silently.
 ## Project structure
 
 ```
-├── src/football_value/   # Python package (config, data, features, model, ...)
-├── tests/                # Unit tests
+├── src/football_value/
+│   ├── config.py                # Paths, constants, settings read from .env
+│   ├── football_data_client.py  # API client: disk cache + rate limiting
+│   ├── collect.py               # 1. player statistics from football-data.org
+│   ├── transfermarkt.py         #    Transfermarkt loading helpers
+│   ├── matching.py              #    player matching across the two sources
+│   ├── merge.py                 # 2. join the two sources
+│   ├── features.py              # 3. cleaning and feature engineering
+│   ├── eda.py                   # 4. exploratory charts
+│   ├── model.py                 # 5. training, evaluation, predictions
+│   ├── visualize.py             # 6. result charts
+│   ├── pipeline.py              # runs steps 1 to 6
+│   ├── scouting.py              # LLM scouting reports (optional)
+│   └── plotting.py              # shared chart style
+├── tests/                       # Unit tests (no network needed)
 ├── data/
-│   ├── raw/              # Cached API responses and downloads (not versioned)
-│   └── processed/        # Cleaned, model-ready datasets (not versioned)
-├── reports/figures/      # Charts produced by the pipeline (versioned)
-├── .env.example          # Template for the required environment variables
-├── requirements.txt      # Pinned runtime dependencies
-└── pyproject.toml        # Package metadata and tool configuration
+│   ├── raw/                     # Cached API responses and downloads (not versioned)
+│   └── processed/               # Cleaned datasets and predictions (not versioned)
+├── reports/
+│   ├── figures/                 # Charts (versioned)
+│   ├── metrics.csv              # Test metrics of the three models
+│   └── coefficients.csv         # Coefficients of the linear model
+├── .env.example                 # Template for the required environment variables
+├── requirements.txt             # Pinned runtime dependencies
+└── pyproject.toml               # Package metadata and tool configuration
 ```
 
 ## Getting started
@@ -85,7 +109,20 @@ The `.env` file is ignored by git, so your keys never leave your machine.
 
 ## Usage
 
-Collect the players' statistics from football-data.org:
+Run the whole pipeline (steps 1 to 6 below) with one command:
+
+```bash
+python -m football_value.pipeline
+```
+
+The first run is slower (it downloads about 55 MB and respects the API rate
+limit); the next ones take about ten seconds because everything is cached. The
+results are reproducible: the random seed is fixed, and a second run gives
+exactly the same metrics and charts.
+
+Or run the steps one by one, to see what each of them does.
+
+**1. Collect** the players' statistics from football-data.org:
 
 ```bash
 python -m football_value.collect
@@ -95,7 +132,7 @@ This sends one request per league, caches the raw responses in
 `data/raw/football_data/` and writes `data/raw/football_data_players.csv`.
 Running it again reads the cache instead of calling the API.
 
-Then add the market values and minutes played from the Transfermarkt dataset:
+**2. Merge** the market values and minutes played from the Transfermarkt dataset:
 
 ```bash
 python -m football_value.merge
@@ -105,7 +142,7 @@ This downloads the dataset once into `data/raw/transfermarkt/` (about 55 MB)
 and writes `data/processed/players_merged.csv`, plus
 `data/processed/unmatched_players.csv` for the players that could not be matched.
 
-Finally, clean the data and build the model-ready dataset:
+**3. Clean** the data and build the model-ready dataset:
 
 ```bash
 python -m football_value.features
@@ -120,7 +157,7 @@ the five features and the market value. The cleaning steps are:
 - a player who changed league mid-season gets a single row with summed statistics;
 - age is computed at the end of the season.
 
-Explore the data and produce the charts shown below:
+**4. Explore** the data and produce the charts shown below:
 
 ```bash
 python -m football_value.eda
@@ -157,7 +194,7 @@ so the regression coefficients can be interpreted without much trouble.
 
 ## Model and results
 
-Train and evaluate the models:
+**5. Train and evaluate** the models:
 
 ```bash
 python -m football_value.model
@@ -217,7 +254,7 @@ The full tables are in [`reports/metrics.csv`](reports/metrics.csv) and
 
 ## Predicted vs actual value
 
-Produce the result charts:
+**6. Produce** the result charts:
 
 ```bash
 python -m football_value.visualize
@@ -278,24 +315,100 @@ it is, which features matter most and what it cannot see.
 - It is instructed to use only the facts provided, not its own memory of
   transfers, injuries or trophies.
 
-The provider is any OpenAI-compatible endpoint: change `LLM_BASE_URL` and
-`LLM_MODEL` in `.env` to use another one.
+**Examples** (generated with the Gemini API; the wording changes from one run
+to the next, the numbers do not):
+
+> *Vedat Muriqi recorded an exceptional campaign for RCD Mallorca in La Liga,
+> totaling 23 goals and one assist across 3,137 minutes played. Among attackers,
+> his goals and playing time both rank in the 99th percentile, whereas his
+> assists sit in the 51st percentile. The statistical model estimates his
+> valuation at €32,974,000, which is 7.33 times higher than his actual
+> Transfermarkt market value of €4,500,000. This massive disparity is driven by
+> known model limitations: because the linear regression applies a straight-line
+> age effect, it systematically overvalues players over 30, such as Muriqi at age
+> 32.2. [...] Ultimately, this valuation gap is far more likely a blind spot of
+> the model than a real market inefficiency.*
+
+> *Rodri's 2025-26 season statistics show he has recorded 1 goal and 0 assists
+> across 1514 minutes played. [...] While his current market value is 50,000,000
+> EUR, the linear regression model predicts a significantly lower valuation of
+> 3,527,000 EUR, representing only 7% of his market price. This substantial gap
+> exists because the model relies exclusively on basic offensive output, age, and
+> position, failing to account for defensive contributions, passing quality, or
+> reputation. [...] this gap is more likely a blind spot of the model rather than
+> a real market inefficiency.*
+
+I checked the numbers of these texts against the data, but the quality of the
+generated text is not evaluated systematically.
+
+**Choosing the provider.** Any OpenAI-compatible endpoint works: change
+`LLM_BASE_URL` and `LLM_MODEL` in `.env`. The default is the free tier of the
+Google Gemini API, which has two practical constraints:
+
+- **Rate limits are strict and differ per model.** At the time of writing,
+  `gemini-3.1-flash-lite` (the default) allows 15 requests per minute and 500 per
+  day, while `gemini-3.8-flash` allows only 5 per minute and 20 per day. Check
+  your own limits in Google AI Studio. The client does not retry automatically,
+  so a failed call does not burn more of your quota.
+- **Models get retired.** If you get a `404` saying a model is no longer
+  available, list the current ones and pick another:
+
+```bash
+curl -s https://generativelanguage.googleapis.com/v1beta/openai/models \
+  -H "Authorization: Bearer $LLM_API_KEY"
+```
+
+## Limitations
+
+Read the results with these in mind:
+
+- **Only players who scored are included.** football-data.org lists scorers
+  only, so there is no goalkeeper and few defenders or midfielders who never
+  scored. The model says nothing about those players, and the position effect
+  is estimated on a biased sample.
+- **One season of statistics against a career-long value.** A market value
+  reflects potential, reputation and contract, not only the last season.
+- **Assists are noisy.** The two sources agree on assists for only 74% of the
+  players who have some; football-data.org's figures are used.
+- **The model is deliberately simple.** The age effect is a straight line (it
+  rises then collapses in reality), there are no interactions, and the league is
+  not a feature, so Premier League players are predicted about twice too low.
+  Predictions also stay close to the average: cheap players are predicted too
+  high and stars too low.
+- **The extended model is fragile at the top.** Its log-scale fit is better, but
+  it values Haaland at about €600M instead of €200M.
+- **Small test set.** The metrics come from 274 players. A 5-fold
+  cross-validation gives similar log-scale R² (0.49 for the linear model, 0.61
+  for the extended one), which suggests the split was not unlucky, but the
+  figures are not precise to the second decimal.
+- **Matching is imperfect.** 12 of the 1,401 players (0.9%) could not be matched
+  across the two sources and are dropped; about a tenth of the others were
+  matched by a looser rule (same birth date and a shared name part, or same name
+  only). As a check, goal counts agree with Transfermarkt's for 98.6% of the
+  matched players, loosely matched ones included.
+- **LLM texts are not deterministic** and depend on a free-tier external service.
+
+## Possible improvements
+
+- **Rebuild the dataset from Transfermarkt's appearances table**, which covers
+  every player including goalkeepers and non-scorers, to remove the biggest
+  limitation above.
+- **Add the league and a curved age effect to the main model**, as the
+  exploratory analysis suggests, and handle the extreme predictions (for example
+  with a regularised regression such as Ridge).
+- **Use per-90-minute statistics and several seasons** to separate current form
+  from long-term level.
+- **Try non-linear models** (gradient boosting) as a comparison, keeping the
+  linear model as the interpretable reference.
+- **Add richer statistics** (expected goals, passing, defensive actions) which
+  football-data.org only offers in paid add-ons.
+- **Report uncertainty**, with prediction intervals instead of a single value.
+- **Evaluate the LLM texts**, for example by automatically checking that every
+  number quoted appears in the data it was given.
 
 ## Development
 
 ```bash
-pytest          # run the tests
+pytest          # run the tests (73, none needs the network)
 ruff check .    # lint
 ```
-
-## Roadmap
-
-- [x] Project skeleton, configuration and tooling
-- [x] Data collection from football-data.org (with local cache and rate limiting)
-- [x] Market values and minutes from the Transfermarkt dataset, joined to the API data
-- [x] Cleaning and feature engineering
-- [x] Exploratory data analysis
-- [x] Linear regression: training and evaluation against a baseline
-- [x] Visualisations: predicted vs actual value, residuals, over/under-valued players
-- [x] LLM scouting reports
-- [ ] Results, limitations and possible improvements
