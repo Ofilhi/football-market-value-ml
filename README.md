@@ -186,6 +186,8 @@ the candidate factors and the market value. The cleaning steps are:
 - players whose market value was last updated before the season are removed;
 - a player who changed league mid-season gets a single row with summed statistics
   and the factors of the team where he played the most;
+- goals and assists are also multiplied by a factor for the difficulty of the
+  league (used by one comparison model, see [Model and results](#model-and-results));
 - age is computed at the end of the season; the team's factors and the player's
   share of his team's matches are added.
 
@@ -286,6 +288,7 @@ sheets.
 | Baseline (same value for everyone) | 73% | 73% | €15.6M | €28.9M | 0.00 |
 | Linear, 5 original features | 63% | 56% | €11.5M | €20.5M | 0.49 |
 | **Ridge, main model** | **33%** | **33%** | **€6.8M** | **€15.0M** | **0.86** |
+| Ridge, goals and assists adjusted for league difficulty | 34% | 33% | €7.5M | €20.8M | 0.86 |
 | Ridge + Transfermarkt extras | 28% | 29% | €6.2M | €17.3M | 0.89 |
 | Gradient boosting, same factors as the main model | 28% | 29% | €5.6M | €11.0M | 0.89 |
 
@@ -318,6 +321,36 @@ model: the typical error for defenders is 32.4% with or without them. What
 improves defenders is the strength of their club, not a measure of their
 defending. The free plan has no lineups, tackles or interceptions, so defensive
 quality is not measured.
+
+**Is a goal worth more in a harder league?** Scoring 10 goals in the Premier
+League is arguably harder than in Ligue 1, so I tested a league difficulty
+factor. I estimated how hard it is to score in each league out of 10 (Premier
+League 9, La Liga 7, Serie A 6, Bundesliga 5, Ligue 1 4.5; these scores are my
+own estimate, not a measurement, and are set in `config.LEAGUE_DIFFICULTY`).
+Each score is divided by the average score to give a multiplier (Premier League
+1.43, La Liga 1.11, Serie A 0.95, Bundesliga 0.79, Ligue 1 0.71), and goals and
+assists are multiplied by the multiplier of their league. For a player who
+changed league, each league is adjusted before the numbers are added up.
+
+It **does not help**: the adjusted model is slightly worse than the main model
+(row above), and much worse on the RMSE, because it amplifies the statistics of
+Premier League stars. Other checks made during development, on the training
+set only (cross-validated R² on the log scale; the main model scores 0.809):
+
+- a stronger effect is worse (0.806 as above, then 0.803, 0.800 and 0.794 when
+  the gap between leagues is made larger);
+- reversing the order of the leagues scores 0.809, the same as no adjustment,
+  so the data cannot tell which league is harder;
+- letting the data learn a different effect of goals and assists in each league
+  scores 0.809, again the same;
+- removing the league category and keeping only the adjustment is much worse
+  (0.748).
+
+The league category already captures the premium of playing in a league, and
+in this data the market does not pay a different amount per goal from one league
+to another. This says how Transfermarkt values behave, not whether the
+difficulty scores are right about football. The adjusted model is kept in the
+results as a documented test of the idea, not as the main model.
 
 **What the model relies on** (largest coefficients of the main model)
 
@@ -475,6 +508,8 @@ Read the results with these in mind:
   reflects potential, reputation and contract, not only the last season. The
   optional Transfermarkt extras help a little (28% error), but potential is not
   measured.
+- **The league difficulty scores are an estimate.** They are my own judgement,
+  not a measurement, and the test of the idea above does not validate them.
 - **Assists are noisy.** The two sources agree on assists for only 74% of the
   players who have some; football-data.org's figures are used.
 - **Predictions are pulled toward the average.** Cheap players are predicted too
@@ -518,6 +553,6 @@ Read the results with these in mind:
 ## Development
 
 ```bash
-pytest          # run the tests (100, none needs the network)
+pytest          # run the tests (106, none needs the network)
 ruff check .    # lint
 ```

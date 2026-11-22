@@ -35,6 +35,10 @@ def players():
             "cl_stage": rng.integers(0, 7, size),
         }
     )
+    multiplier = rng.uniform(0.7, 1.4, size)  # stands for the league difficulty factor
+    frame["goals_adjusted"] = frame["goals"] * multiplier
+    frame["assists_adjusted"] = frame["assists"] * multiplier
+    frame["adjusted_goals_per_match"] = frame["goals_per_match"] * multiplier
     # Optional Transfermarkt factors: noise that the Ridge penalty should learn to ignore.
     for column in [*model.TM_NUMERIC, *model.TM_LOGGED]:
         frame[column] = rng.integers(0, 50, size).astype(float)
@@ -154,6 +158,27 @@ def test_missing_contract_months_are_filled_in_not_rejected(players):
     predictions = fitted.predict(test[model.RIDGE_TM.columns])
 
     assert np.isfinite(predictions).all()
+
+
+def test_league_adjusted_model_swaps_raw_statistics_for_adjusted_ones():
+    adjusted = set(model.RIDGE_ADJUSTED.columns)
+
+    assert {"goals_adjusted", "assists_adjusted", "adjusted_goals_per_match"} <= adjusted
+    assert not adjusted & {"goals", "assists", "goals_per_match"}
+    # Everything else is the same as in the main model.
+    assert adjusted - {"goals_adjusted", "assists_adjusted", "adjusted_goals_per_match"} == set(
+        model.RIDGE.columns
+    ) - {"goals", "assists", "goals_per_match"}
+
+
+def test_league_adjusted_model_trains(players):
+    train, test = model.split_players(players)
+
+    _, metrics = model.train_and_evaluate(model.RIDGE_ADJUSTED, train, test)
+
+    # Lower than for the main model here: the data's rule uses raw goals, and the
+    # adjusted goals of this fixture are a noisy version of them.
+    assert metrics["r2_log"] > 0.8
 
 
 def test_boosting_model_trains_on_the_same_factors_as_ridge(players):

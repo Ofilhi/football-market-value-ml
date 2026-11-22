@@ -22,6 +22,7 @@ pipeline, so that the encoding is learned from the training set only.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 
 import pandas as pd
 
@@ -38,6 +39,9 @@ TARGET = "market_value_eur"
 
 # Derived from the player's own statistics and his team's number of matches.
 ACTIVITY_COLUMNS = ["played_matches", "availability", "goals_per_match"]
+
+# Goals and assists multiplied by a factor for the difficulty of the league.
+LEAGUE_ADJUSTED_COLUMNS = ["goals_adjusted", "assists_adjusted", "adjusted_goals_per_match"]
 
 # Copied from the team table, by the player's team.
 TEAM_COLUMNS = [
@@ -84,6 +88,7 @@ OUTPUT_COLUMNS = [
     *CATEGORICAL_FEATURES,
     *NUMERIC_FEATURES,
     *ACTIVITY_COLUMNS,
+    *LEAGUE_ADJUSTED_COLUMNS,
     *TEAM_COLUMNS,
     *EXTRA_COLUMNS,
     TARGET,
@@ -150,13 +155,58 @@ def combine_league_rows(players: pd.DataFrame) -> pd.DataFrame:
     Goals, assists, minutes and matches played are added up. The team and
     league kept are those where the player spent the most minutes.
     """
-    summed = ["goals", "assists", "minutes_played", "played_matches"]
+    summed = [
+        "goals",
+        "assists",
+        "goals_adjusted",
+        "assists_adjusted",
+        "minutes_played",
+        "played_matches",
+    ]
     ordered = players.sort_values("minutes_played", ascending=False)
     totals = ordered.groupby("player_id", sort=False)[summed].sum()
 
     main_rows = ordered.drop_duplicates("player_id").set_index("player_id")
     main_rows[totals.columns] = totals
     return main_rows.reset_index()
+
+
+def league_factors(
+    difficulty: Mapping[str, float] = config.LEAGUE_DIFFICULTY,
+) -> dict[str, float]:
+    """Turn the difficulty scores of the leagues into multipliers.
+
+    A multiplier is the score divided by the average score, so the average
+    league has a factor of 1, an easier league below 1 and a harder one above
+    1. Ten goals in a league twice as hard as another count for twice as much.
+
+    >>> league_factors({"A": 9.0, "B": 3.0})
+    {'A': 1.5, 'B': 0.5}
+    """
+    average = sum(difficulty.values()) / len(difficulty)
+    return {league: score / average for league, score in difficulty.items()}
+
+
+def add_league_adjusted_stats(
+    players: pd.DataFrame, factors: Mapping[str, float] | None = None
+) -> pd.DataFrame:
+    """Add goals and assists multiplied by the difficulty factor of the league.
+
+    This must run on the rows of a player *per league*, before they are added
+    up, so that a player who changed league is adjusted in each of them.
+
+    Raises:
+        ValueError: if a league has no factor.
+    """
+    factors = league_factors() if factors is None else factors
+    multiplier = players["competition"].map(factors)
+    if multiplier.isna().any():
+        unknown = sorted(set(players.loc[multiplier.isna(), "competition"]))
+        raise ValueError(f"No difficulty factor for the leagues: {unknown}")
+    return players.assign(
+        goals_adjusted=players["goals"] * multiplier,
+        assists_adjusted=players["assists"] * multiplier,
+    )
 
 
 def add_age(players: pd.DataFrame, as_of: str = config.SEASON_END) -> pd.DataFrame:
@@ -172,7 +222,8 @@ def add_team_factors(players: pd.DataFrame, team_table: pd.DataFrame) -> pd.Data
 
     * ``availability``: share of his team's league matches the player appeared in
       (capped at 1, since a player who changed league can have played more);
-    * ``goals_per_match``: goals divided by matches played.
+    * ``goals_per_match`` and ``adjusted_goals_per_match``: goals (raw and
+      adjusted for the league) divided by matches played.
 
     Raises:
         ValueError: if a team is missing from the team table.
@@ -189,6 +240,7 @@ def add_team_factors(players: pd.DataFrame, team_table: pd.DataFrame) -> pd.Data
     return joined.assign(
         availability=(joined["played_matches"] / joined["played"]).clip(upper=1),
         goals_per_match=joined["goals"] / matches,
+        adjusted_goals_per_match=joined["goals_adjusted"] / matches,
     ).drop(columns="played")
 
 
@@ -198,6 +250,7 @@ def build_features(merged: pd.DataFrame, team_table: pd.DataFrame) -> pd.DataFra
         merged.pipe(fill_missing_assists)
         .pipe(group_positions)
         .pipe(drop_stale_valuations)
+        .pipe(add_league_adjusted_stats)
         .pipe(combine_league_rows)
         .pipe(add_age)
         .pipe(add_team_factors, team_table)

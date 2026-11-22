@@ -64,7 +64,7 @@ def test_stale_valuations_are_dropped():
 
 
 def test_league_rows_are_combined_and_main_team_is_kept():
-    merged = features.fill_missing_assists(make_merged())
+    merged = features.fill_missing_assists(make_merged()).pipe(features.add_league_adjusted_stats)
 
     result = features.combine_league_rows(merged).set_index("player_id")
 
@@ -77,6 +77,10 @@ def test_league_rows_are_combined_and_main_team_is_kept():
     assert traveller["team"] == "Club D"  # most minutes played there
     assert traveller["competition"] == "SA"
     assert traveller["market_value_eur"] == 5e6  # a value, not a sum
+    # Adjusted per league *before* adding up: 1 goal in the Premier League and 2 in Serie A.
+    factors = features.league_factors()
+    assert traveller["goals_adjusted"] == pytest.approx(1 * factors["PL"] + 2 * factors["SA"])
+    assert traveller["assists_adjusted"] == pytest.approx(0 * factors["PL"] + 4 * factors["SA"])
 
 
 def test_age_is_computed_at_the_reference_date():
@@ -87,26 +91,70 @@ def test_age_is_computed_at_the_reference_date():
 
 
 def test_team_factors_and_player_activity_are_added():
-    players = features.fill_missing_assists(make_merged()).iloc[[0]]
+    players = (
+        features.fill_missing_assists(make_merged())
+        .pipe(features.add_league_adjusted_stats)
+        .iloc[[0]]
+    )
 
     result = features.add_team_factors(players, make_team_table())
 
     assert result.loc[0, "points_per_game"] == 0  # copied from the team table
     assert result.loc[0, "availability"] == pytest.approx(34 / 38)
     assert result.loc[0, "goals_per_match"] == pytest.approx(20 / 34)
+    assert result.loc[0, "adjusted_goals_per_match"] == pytest.approx(
+        20 * features.league_factors()["PL"] / 34
+    )
     assert "played" not in result.columns
 
 
 def test_availability_is_capped_at_one_for_players_who_changed_league():
-    players = make_merged(played_matches=[34, 20, 40, 40]).iloc[[2]]  # 40 matches, team played 38
-
+    players = (
+        features.fill_missing_assists(make_merged(played_matches=[34, 20, 40, 40]))
+        .pipe(features.add_league_adjusted_stats)
+        .iloc[[2]]  # 40 matches, team played 38
+    )
     result = features.add_team_factors(players, make_team_table())
 
     assert result.loc[2, "availability"] == 1
 
 
+def test_league_factors_average_one_and_follow_the_order_of_difficulty():
+    factors = features.league_factors()
+
+    assert sum(factors.values()) / len(factors) == pytest.approx(1.0)
+    # Premier League > La Liga > Serie A > Bundesliga > Ligue 1.
+    assert factors["PL"] > factors["PD"] > factors["SA"] > factors["BL1"] > factors["FL1"]
+    # The factors keep the ratios of the scores: 9 / 4.5 = 2.
+    assert factors["PL"] / factors["FL1"] == pytest.approx(2.0)
+
+
+def test_league_factors_come_from_the_scores_given():
+    assert features.league_factors({"A": 9.0, "B": 3.0}) == {"A": 1.5, "B": 0.5}
+
+
+def test_goals_and_assists_are_multiplied_by_the_factor_of_the_league():
+    players = pd.DataFrame(
+        {"competition": ["PL", "FL1"], "goals": [10, 10], "assists": [4, 4]},
+    )
+
+    result = features.add_league_adjusted_stats(players, {"PL": 1.5, "FL1": 0.5})
+
+    assert list(result["goals_adjusted"]) == [15, 5]
+    assert list(result["assists_adjusted"]) == [6, 2]
+
+
+def test_a_league_without_a_factor_is_reported():
+    players = pd.DataFrame({"competition": ["XX"], "goals": [1], "assists": [0]})
+
+    with pytest.raises(ValueError, match="XX"):
+        features.add_league_adjusted_stats(players, {"PL": 1.0})
+
+
 def test_a_team_missing_from_the_team_table_is_reported():
-    players = make_merged(team=["Club A", "Club B", "Unknown FC", "Club D"])
+    players = features.fill_missing_assists(
+        make_merged(team=["Club A", "Club B", "Unknown FC", "Club D"])
+    ).pipe(features.add_league_adjusted_stats)
 
     with pytest.raises(ValueError, match="Unknown FC"):
         features.add_team_factors(players, make_team_table())

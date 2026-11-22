@@ -13,6 +13,9 @@ Five models are compared on the same held-out test set:
   features plus the league, the strength of the player's team (league table,
   Champions League) and his activity, all from football-data.org. Age may
   follow a curve instead of a straight line;
+* ``ridge_adjusted``: the ``ridge`` model with goals and assists multiplied by a
+  factor for the difficulty of the league (see ``config.LEAGUE_DIFFICULTY``),
+  to test whether a goal is worth more in a harder league;
 * ``ridge_tm``: the same plus optional factors from Transfermarkt (career
   history, club in Europe, contract, international caps);
 * ``boosting``: gradient boosting on the ``ridge`` factors, kept as a
@@ -59,6 +62,7 @@ from football_value.features import (
     ACTIVITY_COLUMNS,
     CATEGORICAL_FEATURES,
     FEATURES_FILE,
+    LEAGUE_ADJUSTED_COLUMNS,
     NUMERIC_FEATURES,
     TARGET,
 )
@@ -152,6 +156,17 @@ RIDGE_TM = ModelSpec(
     curved=["age"],
     categorical=API_CATEGORICAL,
 )
+# Goals, assists and goals per match replaced by their league-adjusted versions.
+_RAW_STATS = ("goals", "assists", "goals_per_match")
+RIDGE_ADJUSTED = ModelSpec(
+    name="ridge_adjusted",
+    numeric=[
+        *[column for column in API_NUMERIC if column not in _RAW_STATS],
+        *LEAGUE_ADJUSTED_COLUMNS,
+    ],
+    curved=["age"],
+    categorical=API_CATEGORICAL,
+)
 BOOSTING = ModelSpec(
     name="boosting",
     numeric=API_NUMERIC,
@@ -159,7 +174,7 @@ BOOSTING = ModelSpec(
     categorical=API_CATEGORICAL,
     estimator="boosting",
 )
-MODEL_SPECS = (BASELINE, LINEAR, RIDGE, RIDGE_TM, BOOSTING)
+MODEL_SPECS = (BASELINE, LINEAR, RIDGE, RIDGE_ADJUSTED, RIDGE_TM, BOOSTING)
 MAIN_SPEC = RIDGE
 
 

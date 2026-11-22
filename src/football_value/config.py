@@ -36,6 +36,16 @@ COMPETITIONS: dict[str, str] = {
     "FL1": "Ligue 1",
 }
 
+# How hard it is to score in each league, out of 10 (the author's own estimate).
+# Only the scale matters: see features.league_factors.
+LEAGUE_DIFFICULTY: dict[str, float] = {
+    "PL": 9.0,
+    "PD": 7.0,
+    "SA": 6.0,
+    "BL1": 5.0,
+    "FL1": 4.5,
+}
+
 # A season is identified by the year it starts in: 2025 means 2025-26.
 SEASON = 2025
 SEASON_START = f"{SEASON}-07-01"
